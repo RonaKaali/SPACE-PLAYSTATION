@@ -1,3 +1,40 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "ps5-console",
+      "description": "Sony PlayStation 5 Console",
+      "imageUrl": "https://images.unsplash.com/photo-1744472649709-22a4eedb172a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxwbGF5c3RhdGlvbiUyMGNvbnNvbGV8ZW58MHx8fHwxNzU4OTk1NzIxfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "playstation console"
+    },
+    {
+      "id": "ps4-console",
+      "description": "Sony PlayStation 4 Console",
+      "imageUrl": "https://images.unsplash.com/photo-1687713143142-c315b11bc046?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxwbGF5c3RhdGlvbiUyMGNvbnNvbGV8ZW58MHx8fHwxNzU4OTk1NzIxfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "playstation console"
+    },
+    {
+      "id": "fifa-23",
+      "description": "Game cover for FIFA 23",
+      "imageUrl": "https://images.unsplash.com/photo-1486572788966-cfd3df1f5b42?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHx2aWRlbyUyMGdhbWV8ZW58MHx8fHwxNzU4OTk1NzIxfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "video game"
+    },
+    {
+      "id": "hogwarts-legacy",
+      "description": "Game cover for Hogwarts Legacy",
+      "imageUrl": "https://images.unsplash.com/photo-1595429035839-c99c298ffdde?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHx2aWRlbyUyMGdhbWV8ZW58MHx8fHwxNzU4OTk1NzIxfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "video game"
+    },
+    {
+      "id": "god-of-war",
+      "description": "Game cover for God of War Ragnarok",
+      "imageUrl": "https://images.unsplash.com/photo-1618193139062-2c5bf4f935b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8dmlkZW8lMjBnYW1lfGVufDB8fHx8MTc1ODk5NTcyMXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "video game"
+    },
+    {
+      "id": "hero-image",
+      "description": "Hero image for landing page",
+      "imageUrl": "https://images.unsplash.com/photo-1675049626914-b2e051e92f23?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxnYW1pbmclMjBzZXR1cHxlbnwwfHx8fDE3NTg5MjEyNTJ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "gaming setup"
+    }
+  ]
 }
