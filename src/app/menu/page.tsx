@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ShoppingCart, Plus, Minus, Loader2 } from 'lucide-react';
+import { useToast } from "@/components/ui/use-toast"; // DIIMPOR: Hook untuk menampilkan notifikasi toast
 
 const generateAllUnits = () => {
   let units: { id: string; name: string }[] = [];
@@ -32,6 +33,7 @@ export default function MenuPage() {
   const [cart, setCart] = useState<Record<string, CartItem>>({});
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast(); // DIINISIASI: Fungsi toast untuk digunakan
   const allUnits = generateAllUnits();
 
   const addToCart = (item: MenuItem) => {
@@ -63,38 +65,62 @@ export default function MenuPage() {
   const total = cartAsArray.reduce((sum, { item, quantity }) => sum + item.price * quantity, 0);
 
   const handleOrder = async () => {
+    // DIPERBARUI: Menggunakan toast untuk validasi
     if (!selectedUnit) {
-      alert('Pilih unit Anda terlebih dahulu!');
+      toast({
+        variant: "destructive",
+        title: "Unit Belum Dipilih",
+        description: "Silakan pilih unit atau tempat Anda bermain terlebih dahulu.",
+      });
       return;
     }
     if (cartAsArray.length === 0) {
-      alert('Keranjang Anda masih kosong.');
+      toast({
+        variant: "destructive",
+        title: "Keranjang Kosong",
+        description: "Tambahkan item ke keranjang sebelum membuat pesanan.",
+      });
       return;
     }
 
     setIsLoading(true);
     try {
-        const res = await fetch('/api/pusher', {
+        const res = await fetch('/api/orders', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 unit: selectedUnit,
-                items: cartAsArray.map(ci => ({ name: ci.item.name, quantity: ci.quantity })),
-                total,
+                items: cartAsArray.map(ci => ({ menuItem: ci.item.id, quantity: ci.quantity })),
+                totalAmount: total,
+                status: 'pending'
             }),
         });
 
         if (res.ok) {
-            alert('Terimakasih pemesanan berhasil silahkan tunggu dan siapkan uang tunai');
+            // DIPERBARUI: Notifikasi sukses menggunakan toast
+            toast({
+                title: "Pesanan Berhasil Terkirim!",
+                description: "Silakan tunggu, pesanan Anda sedang disiapkan.",
+            });
             setCart({});
+            setSelectedUnit(''); // Mengosongkan pilihan unit juga
         } else {
-            alert('Gagal membuat pesanan. Coba lagi.');
+            const errorData = await res.json();
+            // DIPERBARUI: Notifikasi error menggunakan toast
+            toast({
+                variant: "destructive",
+                title: "Gagal Membuat Pesanan",
+                description: errorData.message || 'Terjadi kesalahan pada server. Coba lagi.',
+            });
         }
     } catch (error) {
         console.error('Failed to submit order:', error);
-        alert('Terjadi kesalahan. Periksa koneksi Anda dan coba lagi.');
+        // DIPERBARUI: Notifikasi error koneksi menggunakan toast
+        toast({
+            variant: "destructive",
+            title: "Koneksi Gagal",
+            description: "Terjadi kesalahan. Periksa koneksi Anda dan coba lagi.",
+        });
     } finally {
         setIsLoading(false);
     }
