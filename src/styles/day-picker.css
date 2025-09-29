@@ -1,0 +1,22 @@
+.rdp {
+  --rdp-cell-size: 40px;
+  --rdp-caption-font-size: 18px;
+  --rdp-accent-color: #FF9500; /* Primary Orange */
+  --rdp-background-color: #fef3c7;
+  --rdp-selected-color: #222222; /* Dark text for contrast */
+  margin: 1em 0;
+}
+
+.rdp-day_disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rdp-day_selected,
+.rdp-day_selected:focus-visible,
+.rdp-day_selected:hover {
+  background-color: var(--rdp-accent-color);
+  color: var(--rdp-selected-color);
+  font-weight: bold;
+  border-radius: 6px;
+}

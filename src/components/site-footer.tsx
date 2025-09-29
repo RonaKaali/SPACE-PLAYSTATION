@@ -7,12 +7,12 @@ export function SiteFooter() {
         <div className="flex items-center gap-2">
           <Gamepad2 className="h-5 w-5 text-primary" />
           <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-            Dibangun dengan <span className="text-primary">❤️</span> oleh tim RentStation.
+            Dibangun dengan <span className="text-primary">❤️</span> oleh tim SPACE STATION.
           </p>
         </div>
         <p className="text-center text-sm text-muted-foreground md:text-left">
-          © {new Date().getFullYear()} RentStation. Semua Hak Cipta Dilindungi.
-        p>
+          © {new Date().getFullYear()} SPACE STATION. Semua Hak Cipta Dilindungi.
+        </p>
       </div>
     </footer>
   );

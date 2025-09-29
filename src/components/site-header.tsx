@@ -1,7 +1,8 @@
+
 "use client";
 
 import Link from "next/link";
-import { Gamepad2, Menu } from "lucide-react";
+import { Gamepad2, Menu, ShieldCheck } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ export function SiteHeader() {
     const navLinks = [
         { href: "/", label: "Beranda" },
         { href: "/#konsol", label: "Konsol" },
+        { href: "/availability", label: "Laporan Langsung" },
         { href: "/rekomendasi", label: "Rekomendasi AI" },
     ];
 
@@ -43,6 +45,9 @@ export function SiteHeader() {
           </nav>
         </div>
         <div className="flex flex-1 items-center justify-end gap-2">
+            <Button asChild variant="outline" className="hidden md:flex items-center gap-2">
+                <Link href="/admin"><ShieldCheck size={16}/> Dasbor Admin</Link>
+            </Button>
             <Button asChild className="hidden md:flex">
                 <Link href="/#konsol">Sewa Sekarang</Link>
             </Button>
@@ -63,16 +68,22 @@ export function SiteHeader() {
                     </Link>
                     <div className="my-4 h-[calc(100vh-8rem)] pb-10 pl-6">
                         <div className="flex flex-col space-y-3">
-                        {navLinks.map((link) => (
-                            <Link
-                                key={link.href}
-                                href={link.href}
-                                className="text-muted-foreground"
-                                onClick={() => setOpen(false)}
-                            >
-                                {link.label}
+                            {navLinks.map((link) => (
+                                <Link
+                                    key={link.href}
+                                    href={link.href}
+                                    className="text-muted-foreground"
+                                    onClick={() => setOpen(false)}
+                                >
+                                    {link.label}
+                                </Link>
+                            ))}
+                        </div>
+                        <div className="mt-6 pt-6 border-t">
+                            <Link href="/admin" className="flex items-center text-foreground/70" onClick={() => setOpen(false)}>
+                                <ShieldCheck className="mr-2 h-4 w-4" />
+                                <span>Dasbor Admin</span>
                             </Link>
-                        ))}
                         </div>
                     </div>
                 </SheetContent>
