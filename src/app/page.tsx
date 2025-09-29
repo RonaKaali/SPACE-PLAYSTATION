@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useInView } from 'react-intersection-observer';
 import AudioPlayer from '@/components/AudioPlayer';
+import { LocationCard } from "@/components/location-card"; // DIIMPOR: Komponen kartu lokasi
 
 export default function HomePage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function HomePage() {
   });
 
   return (
+    // DIHAPUS: Placeholder div tidak diperlukan lagi
     <div className="relative w-full" style={{ perspective: '1000px' }}>
       <AudioPlayer src="/music/SELAMAT DATANG DI WE.mp3" />
       <div className="relative z-10 flex flex-col items-center justify-center h-screen text-center text-white px-4">
@@ -64,20 +66,11 @@ export default function HomePage() {
                   Pemesanan Makanan
               </Button>
             </div>
-
-            <div
-              className={`mt-10 flex space-x-4 transition-all duration-1000 delay-800 ${inView ? 'opacity-100 translate-y-0 rotate-x-0' : 'opacity-0 translate-y-10 -rotate-x-45'}`}
-            >
-              <Link href="#" className="text-primary hover:text-white transition-colors"><Instagram size={20} /></Link>
-              <Link href="#" className="text-primary hover:text-white transition-colors"><Youtube size={20} /></Link>
-              <Link href="#" className="text-primary hover:text-white transition-colors"><Twitch size={20} /></Link>
-              <Link href="#" className="text-primary hover:text-white transition-colors"><Twitter size={20} /></Link>
-              <Link href="#" className="text-primary hover:text-white transition-colors"><Facebook size={20} /></Link>
-            </div>
+            {/* DIHAPUS: Ikon media sosial karena sudah ada di footer */}
         </div>
       </div>
-      {/* Placeholder div to enable scrolling */}
-      <div className="h-screen"></div>
+      {/* DITAMBAHKAN: Komponen kartu lokasi ditampilkan di bawah bagian utama */}
+      <LocationCard />
     </div>
   );
 }
