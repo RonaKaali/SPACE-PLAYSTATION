@@ -17,6 +17,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// --- DIUBAH: Tambahkan toast untuk notifikasi ---
+import { useToast } from "@/components/ui/use-toast"
+
 const priceList = {
     regular: { ps4: { '1': 10000, '3': 25000, baseRate: 10000 }, },
     private: { ps4: { '1': 12000, '3': 30000, baseRate: 12000 }, },
@@ -52,6 +55,7 @@ const calculatePrice = (service: keyof typeof spaces | null, console: 'ps4' | 'p
 };
 
 export default function ReservationPage() {
+  const { toast } = useToast() // DIUBAH: Inisialisasi toast
   const [name, setName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedService, setSelectedService] = useState<keyof typeof spaces | null>(null);
@@ -65,7 +69,9 @@ export default function ReservationPage() {
   const [duration, setDuration] = useState(0);
   const [isFormValid, setIsFormValid] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // DIUBAH: State untuk status loading
 
+  // ... (useEffect hooks tetap sama, tidak perlu diubah)
   useEffect(() => {
       const newTimeSlots = generateTimeSlots(selectedDate);
       setTimeSlots(newTimeSlots);
@@ -109,6 +115,55 @@ export default function ReservationPage() {
     setIsFormValid(isValid);
   }, [name, phoneNumber, selectedService, selectedConsole, selectedDate, duration]);
 
+  // DIUBAH: Fungsi untuk menangani proses booking
+  const handleBooking = async () => {
+    setIsSubmitting(true);
+    try {
+      const bookingData = {
+        name,
+        phoneNumber,
+        date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '',
+        startTime: startTime,
+        endTime: endTime,
+        duration,
+        service: selectedService ? spaces[selectedService].name : '',
+        console: selectedConsole,
+        totalPrice,
+        status: 'pending', // Status awal
+      };
+
+      const response = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bookingData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Gagal mengirim data pemesanan.');
+      }
+
+      const result = await response.json();
+      toast({
+        title: "Booking Berhasil",
+        description: `ID Reservasi Anda adalah ${result.bookingId}`,
+        variant: "success",
+      })
+      return result; // Kembalikan hasil agar bisa digunakan oleh PaymentDialog
+
+    } catch (error: any) {
+      console.error("Error saat booking:", error);
+      toast({
+        title: "Terjadi Kesalahan",
+        description: error.message || "Tidak dapat menyelesaikan pemesanan Anda.",
+        variant: "destructive",
+      })
+      throw error; // Lempar kembali error agar bisa ditangani di dialog
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-12 md:px-6 lg:py-16">
       <div className="mx-auto max-w-5xl text-center">
@@ -122,7 +177,6 @@ export default function ReservationPage() {
             {/* --- KOLOM KIRI --- */}
             <div className="space-y-6">
               <h3 className="font-headline text-xl font-semibold">Langkah 1: Isi Detail Anda</h3>
-              {/* DIUBAH: Tata letak Select diubah menjadi satu kolom penuh */}
               <div className="space-y-4">
                 <div className="space-y-2"><Label htmlFor="name">Nama</Label><Input id="name" placeholder="Nama lengkap Anda" value={name} onChange={(e) => setName(e.target.value)} /></div>
                 <div className="space-y-2"><Label htmlFor="phone">No HP</Label><Input id="phone" placeholder="contoh: 08123456789" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} /></div>
@@ -171,6 +225,7 @@ export default function ReservationPage() {
                 <p className="text-muted-foreground">Total Biaya untuk <span className="font-bold text-white">{duration} Jam</span></p>
                 <p className="font-bold text-4xl text-primary">Rp {totalPrice.toLocaleString('id-ID')}</p>
              </div>
+             {/* DIUBAH: Tambahkan properti onConfirm dan isSubmitting */}
              <PaymentDialog 
                 reservationDetails={{
                     name, phoneNumber, 
@@ -180,7 +235,9 @@ export default function ReservationPage() {
                     console: selectedConsole ? (selectedConsole === 'ps4' ? 'PlayStation 4' : 'PlayStation 5') : 'N/A',
                     totalPrice
                 }}
-                trigger={ <Button size="lg" className="w-full max-w-xs font-bold text-lg bg-primary hover:bg-primary/90 rounded-xl shadow-md transition-transform transform hover:scale-105" disabled={!isFormValid}>Booking & Bayar Sekarang</Button>}
+                onConfirm={handleBooking} 
+                isSubmitting={isSubmitting}
+                trigger={ <Button size="lg" className="w-full max-w-xs font-bold text-lg bg-primary hover:bg-primary/90 rounded-xl shadow-md transition-transform transform hover:scale-105" disabled={!isFormValid}>Booking & Bayar</Button>}
             />
           </div>
         </CardContent>

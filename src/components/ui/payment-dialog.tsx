@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "./button";
 import { Separator } from "./separator";
-import { CheckCircle2, FileText } from 'lucide-react';
+import { CheckCircle2, FileText, Loader2 } from 'lucide-react'; // DIUBAH: Impor Loader2
 
 interface PaymentDialogProps {
     trigger: React.ReactNode;
@@ -30,31 +30,38 @@ interface PaymentDialogProps {
         service: string;
         console: string;
         totalPrice: number;
-    }
+    };
+    onConfirm: () => Promise<any>; // DIUBAH: Prop untuk handle booking
+    isSubmitting: boolean; // DIUBAH: Prop untuk status loading
 }
 
-function generateReservationId() {
-    const prefix = "KUPL/";
-    const randomPart = Math.random().toString(36).substring(2, 9).toUpperCase();
-    return `${prefix}${randomPart}`;
-}
+// DIHAPUS: Fungsi generateReservationId tidak lagi diperlukan di sini
 
-export function PaymentDialog({ trigger, reservationDetails }: PaymentDialogProps) {
+export function PaymentDialog({ trigger, reservationDetails, onConfirm, isSubmitting }: PaymentDialogProps) {
     const [step, setStep] = useState('details'); // details, qris, receipt
     const [paymentStatus, setPaymentStatus] = useState<'LUNAS' | 'BELUM DIBAYAR'>('BELUM DIBAYAR');
-    const [reservationId, setReservationId] = useState("");
+    const [reservationId, setReservationId] = useState(""); // ID akan dari server, tapi kita bisa generate di client untuk tampilan awal
 
-    const handleInitialPay = () => {
-        setReservationId(generateReservationId());
+    const handlePayOnSite = async () => {
+        try {
+            const result = await onConfirm(); // Menjalankan fungsi booking dari parent
+            setReservationId(result.bookingId); // Simpan bookingId dari respons server
+            setPaymentStatus('BELUM DIBAYAR');
+            setStep('receipt');
+        } catch (error) {
+            console.error("Gagal konfirmasi booking:", error);
+            // Toast error sudah ditangani di parent
+        }
     }
 
-    const handlePayOnSite = () => {
-        setPaymentStatus('BELUM DIBAYAR');
-        setStep('receipt');
-    }
-
-    const handleContinueToQRIS = () => {
-        setStep('qris');
+    const handleContinueToQRIS = async () => {
+         try {
+            const result = await onConfirm(); // Menjalankan fungsi booking dari parent
+            setReservationId(result.bookingId);
+            setStep('qris');
+        } catch (error) {
+            console.error("Gagal konfirmasi booking:", error);
+        }
     }
 
     const handlePaymentSuccess = () => {
@@ -79,7 +86,7 @@ export function PaymentDialog({ trigger, reservationDetails }: PaymentDialogProp
             </DialogHeader>
             <div className="px-4 pb-4 space-y-3">
                 <div className="bg-background/50 p-3 rounded-lg space-y-2.5">
-                    {detailItem("ID Reservasi", reservationId)}
+                    {detailItem("Nama", reservationDetails.name)}
                     <Separator />
                     {detailItem("Detail Tempat", `${reservationDetails.console.toUpperCase()} ${reservationDetails.service}`)}
                      <Separator />
@@ -92,21 +99,30 @@ export function PaymentDialog({ trigger, reservationDetails }: PaymentDialogProp
                     </div>
                 </div>
                 <div className="flex flex-col gap-2 pt-2">
-                     <Button onClick={handlePayOnSite} variant="outline" className="w-full font-bold text-base">Bayar di Tempat</Button>
+                     <Button onClick={handlePayOnSite} variant="outline" className="w-full font-bold text-base" disabled={isSubmitting}>
+                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
+                        Bayar di Tempat
+                    </Button>
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button className="w-full bg-primary hover:bg-primary/90 font-bold text-base">Bayar Sekarang (QRIS)</Button>
+                            <Button className="w-full bg-primary hover:bg-primary/90 font-bold text-base" disabled={isSubmitting}>
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Bayar Sekarang (QRIS)
+                            </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                             <AlertDialogHeader>
-                            <AlertDialogTitle>Anda akan diarahkan ke pembayaran QRIS</AlertDialogTitle>
+                            <AlertDialogTitle>Anda akan melanjutkan ke pembayaran</AlertDialogTitle>
                             <AlertDialogDescription>
-                                Pastikan koneksi jaringan mu stabil dan jangan sampai halaman ini keluar ketika proses pembayaranmu!
+                                Data pesanan Anda akan disimpan sebelum melanjutkan. Pastikan semua data sudah benar.
                             </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                            <AlertDialogCancel>Batal</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleContinueToQRIS}>Lanjutkan</AlertDialogAction>
+                            <AlertDialogCancel disabled={isSubmitting}>Batal</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleContinueToQRIS} disabled={isSubmitting}>
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} 
+                                Lanjutkan
+                            </AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
@@ -170,8 +186,12 @@ export function PaymentDialog({ trigger, reservationDetails }: PaymentDialogProp
     )
 
     return (
-        <Dialog onOpenChange={(open) => !open && setStep('details')}>
-            <DialogTrigger asChild onClick={handleInitialPay}>{trigger}</DialogTrigger>
+        <Dialog onOpenChange={(open) => {
+            if (!open) {
+                setStep('details');
+            }
+        }}>
+            <DialogTrigger asChild>{trigger}</DialogTrigger>
             <DialogContent className="sm:max-w-xs bg-card border-secondary p-0">
                 {step === 'details' && renderDetails()}
                 {step === 'qris' && renderQRIS()}
