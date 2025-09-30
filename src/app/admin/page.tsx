@@ -46,7 +46,6 @@ function AdminPage() {
   const [units, setUnits] = useState<RentalUnit[]>(initialUnits);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hasInteracted = useRef(false);
-  const pusherSubscribed = useRef(false);
 
   useEffect(() => {
     audioRef.current = new Audio('/music/notification.mp3');
@@ -68,32 +67,52 @@ function AdminPage() {
     fetchActiveOrders();
   }, []);
 
+  // --- DIUBAH: Menggabungkan semua listener Pusher dalam satu useEffect --- 
   useEffect(() => {
-    if (pusherSubscribed.current) return;
-    pusherSubscribed.current = true;
-
+    // --- Listener untuk Notifikasi Pesanan ---
     const playNotificationSound = () => {
       if (hasInteracted.current) { audioRef.current?.play().catch(console.error); }
       setShowNotification(true);
       setTimeout(() => setShowNotification(false), 3500);
     };
-
     const handleNewOrder = (newOrder: IOrder) => { if (!newOrder?._id) return; setOrders(prev => [newOrder, ...prev.filter(o => o._id !== newOrder._id)]); playNotificationSound(); };
-    const handleStatusUpdate = (updatedOrder: IOrder) => { if (!updatedOrder?._id) return; const isFinished = updatedOrder.status === 'completed' || updatedOrder.status === 'cancelled'; if (isFinished) { setOrders(prev => prev.filter(order => order._id !== updatedOrder._id)); } else { setOrders(prev => prev.map(order => order._id === updatedOrder._id ? updatedOrder : order)); } };
+    const handleOrderStatusUpdate = (updatedOrder: IOrder) => { if (!updatedOrder?._id) return; const isFinished = updatedOrder.status === 'completed' || updatedOrder.status === 'cancelled'; if (isFinished) { setOrders(prev => prev.filter(order => order._id !== updatedOrder._id)); } else { setOrders(prev => prev.map(order => order._id === updatedOrder._id ? updatedOrder : order)); } };
+    
+    const orderChannel = pusherClient.subscribe('orders');
+    orderChannel.bind('new-order', handleNewOrder);
+    orderChannel.bind('status-update', handleOrderStatusUpdate);
 
-    const channel = pusherClient.subscribe('orders');
-    channel.bind('new-order', handleNewOrder);
-    channel.bind('status-update', handleStatusUpdate);
+    // --- Listener untuk Status Unit Real-time ---
+    const unitChannel = pusherClient.subscribe('unit-status');
+    const handleUnitStatusUpdate = ({ id, newStatus }: { id: string; newStatus: 'Tersedia' | 'Digunakan' }) => {
+        setUnits(prev => prev.map(u => String(u.id) === id ? { ...u, status: newStatus } : u));
+    };
+    unitChannel.bind('status-update', handleUnitStatusUpdate);
 
-    return () => { channel.unbind_all(); pusherClient.unsubscribe('orders'); pusherSubscribed.current = false; };
+    return () => {
+      orderChannel.unbind_all();
+      pusherClient.unsubscribe('orders');
+      unitChannel.unbind_all();
+      pusherClient.unsubscribe('unit-status');
+    };
   }, []);
 
   const handleStatusChange = async (orderId: string, newStatus: IOrder['status']) => {
-    try { await fetch(`/api/orders/${orderId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }), }); } catch (error) { console.error('Gagal memperbarui status:', error); }
+    try { await fetch(`/api/orders/${orderId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }), }); } catch (error) { console.error('Gagal memperbarui status pesanan:', error); }
   };
 
-  const toggleUnitStatus = (unitId: string) => {
-    setUnits(units.map(u => u.id === unitId ? { ...u, status: u.status === 'Tersedia' ? 'Digunakan' : 'Tersedia' } : u));
+  // --- DIUBAH: Fungsi ini sekarang memanggil API untuk menyiarkan perubahan ---
+  const toggleUnitStatus = async (unitId: string, currentStatus: 'Tersedia' | 'Digunakan') => {
+    const newStatus = currentStatus === 'Tersedia' ? 'Digunakan' : 'Tersedia';
+    try {
+      await fetch(`/api/units/${unitId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch (error) {
+      console.error('Gagal memperbarui status unit:', error);
+    }
   };
 
   const renderUnitGroup = (title: string, unitsToRender: RentalUnit[]) => (
@@ -108,7 +127,8 @@ function AdminPage() {
                       </CardHeader>
                       <CardContent className="p-3 pt-1">
                           <p className={cn("font-bold mb-2 text-sm", unit.status === 'Tersedia' ? 'text-green-400' : 'text-red-400')}>{unit.status}</p>
-                          <Button onClick={() => toggleUnitStatus(unit.id)} size="sm" variant='secondary' className='w-full h-8 text-xs'>
+                          {/* --- DIUBAH: Mengirim status saat ini ke fungsi toggle --- */}
+                          <Button onClick={() => toggleUnitStatus(unit.id, unit.status)} size="sm" variant='secondary' className='w-full h-8 text-xs'>
                               {unit.status === 'Tersedia' ? 'Mulai Sesi' : 'Akhiri Sesi'}
                           </Button>
                       </CardContent>
@@ -132,7 +152,6 @@ function AdminPage() {
         <div>
           <h2 className="text-2xl font-semibold mb-6 flex items-center gap-3"><MonitorPlay size={24}/> Manajemen Status Unit</h2>
           <div className="space-y-6">
-              {/* --- DIUBAH: Penanganan ID yang lebih aman untuk mencegah error --- */}
               {renderUnitGroup('VIP', units.filter(u => String(u.id).startsWith('vip')))}
               {renderUnitGroup('Private', units.filter(u => String(u.id).startsWith('private')))}
               {renderUnitGroup('Regular', units.filter(u => String(u.id).startsWith('regular')))}

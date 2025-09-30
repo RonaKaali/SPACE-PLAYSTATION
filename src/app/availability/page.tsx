@@ -1,72 +1,79 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Gamepad2, Film } from 'lucide-react';
-import { rentalSpaces } from '@/lib/data';
+import { pusherClient } from '@/lib/pusher';
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'Tersedia':
-      return 'text-green-500';
-    case 'Digunakan':
-      return 'text-red-500';
-    case 'Perbaikan':
-      return 'text-yellow-500';
-    default:
-      return 'text-gray-500';
+    case 'Tersedia': return 'text-green-500';
+    case 'Digunakan': return 'text-red-500';
+    default: return 'text-gray-500';
   }
 };
 
+// --- PERBAIKAN: Mendefinisikan semua unit secara langsung untuk memastikan kelengkapan data ---
 const generateInitialStations = () => {
-  let stations: any[] = [];
-  rentalSpaces.forEach(space => {
-    if (space.units > 1) {
-      for (let i = 1; i <= space.units; i++) {
-        stations.push({
-          ...space,
-          id: `${space.id}-${i}`,
-          name: `${space.name} ${i}`,
-          status: 'Tersedia',
-        });
-      }
-    } else {
-      stations.push({ ...space, status: 'Tersedia' });
-    }
-  });
+  const stations: any[] = [
+    // VIP Units
+    { id: 'vip-1', name: 'VIP 01', console: 'ps4', netflix: true, price1hr: 15000, price3hr: 40000, status: 'Tersedia', category: 'vip' },
+    { id: 'vip-2', name: 'VIP 02', console: 'ps5', netflix: true, price1hr: 20000, price3hr: 55000, status: 'Tersedia', category: 'vip' },
+    { id: 'vip-3', name: 'VIP 03', console: 'ps5', netflix: true, price1hr: 20000, price3hr: 55000, status: 'Tersedia', category: 'vip' },
+    
+    // Private Units
+    ...Array.from({ length: 6 }, (_, i) => ({
+      id: `private-${i + 1}`,
+      name: `Private ${i + 1}`,
+      console: 'ps4',
+      netflix: false,
+      price1hr: 10000,
+      price3hr: 25000,
+      status: 'Tersedia',
+      category: 'private'
+    })),
+
+    // Regular Units
+    ...Array.from({ length: 6 }, (_, i) => ({
+      id: `regular-${i + 1}`,
+      name: `Regular ${i + 1}`,
+      console: 'ps4',
+      netflix: false,
+      price1hr: 7000,
+      price3hr: 20000,
+      status: 'Tersedia',
+      category: 'regular'
+    })),
+  ];
   return stations;
 };
 
 export default function AvailabilityPage() {
   const [stations, setStations] = useState(generateInitialStations());
-  const [selectedCategory, setSelectedCategory] = useState('regular');
+  const [selectedCategory, setSelectedCategory] = useState('vip'); // Default ke VIP
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const channel = pusherClient.subscribe('unit-status');
+    
+    const handleUnitStatusUpdate = ({ id, newStatus }: { id: string; newStatus: 'Tersedia' | 'Digunakan' }) => {
       setStations(prevStations =>
-        prevStations.map(station => {
-          if (Math.random() > 0.85) { 
-            return {
-              ...station,
-              status: station.status === 'Tersedia' ? 'Digunakan' : 'Tersedia',
-            };
-          }
-          return station;
-        })
+        prevStations.map(station =>
+          String(station.id) === id ? { ...station, status: newStatus } : station
+        )
       );
-    }, 3000);
+    };
 
-    return () => clearInterval(interval);
+    channel.bind('status-update', handleUnitStatusUpdate);
+
+    return () => {
+      channel.unbind('status-update', handleUnitStatusUpdate);
+      pusherClient.unsubscribe('unit-status');
+    };
   }, []);
 
-  const filteredStations = stations.filter(station => {
-    if (selectedCategory === 'vip') {
-      return station.id.startsWith('vip');
-    }
-    return station.id.startsWith(selectedCategory);
-  });
+  // --- PERBAIKAN: Logika filter disederhanakan dan diperbaiki ---
+  const filteredStations = stations.filter(station => station.category === selectedCategory);
 
   return (
     <div className="container mx-auto px-4 py-12 md:px-6 lg:py-16">
