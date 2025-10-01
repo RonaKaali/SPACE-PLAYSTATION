@@ -6,9 +6,8 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    // PERBAIKAN: Ambil ID dari params SEBELUM melakukan await pada request body
     const { id } = params;
-    const { status: newStatus } = await req.json();
+    const { status: newStatus, remainingTime } = await req.json();
 
     if (!newStatus || !id) {
       return new NextResponse("Data tidak lengkap", { status: 400 });
@@ -18,6 +17,7 @@ export async function PUT(
     await pusherServer.trigger("unit-status", "status-update", {
       id,
       newStatus,
+      remainingTime, // Sertakan sisa waktu
     });
 
     return new NextResponse("Status berhasil diperbarui dan disiarkan", {

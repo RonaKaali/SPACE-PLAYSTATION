@@ -5,167 +5,245 @@ import Link from 'next/link';
 import { pusherClient } from '@/lib/pusher';
 import { OrderCard } from '@/components/admin/OrderCard';
 import { IOrder } from '@/lib/models/order';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BellRing, ShoppingBag, Gamepad2, MonitorPlay, History, BookOpenCheck } from 'lucide-react';
+import { BellRing, ShoppingBag, Gamepad2, MonitorPlay, History, BookOpenCheck, Film } from 'lucide-react';
 import withAuth from '@/components/auth/withAuth';
 import { cn } from '@/lib/utils';
+import RealTimeClock from '@/components/ui/real-time-clock';
+import { SessionDialog } from '@/components/ui/session-dialog';
 
+// Tipe Data yang Konsisten
 type RentalUnit = {
   id: string;
   name: string;
-  console: string;
+  console: 'ps4' | 'ps5';
+  netflix: boolean;
+  price1hr: number;
+  price3hr: number;
   status: 'Tersedia' | 'Digunakan';
+  remainingTime: number;
 };
 
 const unitSetup = {
   vip: [
-    { id: 'vip-1', name: 'VIP 01', console: 'PS4 + Netflix', status: 'Tersedia' as const },
-    { id: 'vip-2', name: 'VIP 02', console: 'PS5 + Netflix', status: 'Tersedia' as const },
-    { id: 'vip-3', name: 'VIP 03', console: 'PS5 + Netflix', status: 'Tersedia' as const },
+    { id: 'vip-1', name: 'VIP 01', console: 'ps4', netflix: true, price1hr: 15000, price3hr: 40000 },
+    { id: 'vip-2', name: 'VIP 02', console: 'ps5', netflix: true, price1hr: 20000, price3hr: 55000 },
+    { id: 'vip-3', name: 'VIP 03', console: 'ps5', netflix: true, price1hr: 20000, price3hr: 55000 },
   ],
-  private: Array.from({ length: 6 }, (_, i) => ({
-    id: `private-${i + 1}`,
-    name: `Private ${i + 1}`,
-    console: 'PS4',
-    status: 'Tersedia' as const,
-  })),
-  regular: Array.from({ length: 6 }, (_, i) => ({
-    id: `regular-${i + 1}`,
-    name: `Regular ${i + 1}`,
-    console: 'PS4',
-    status: 'Tersedia' as const,
-  })),
+  private: Array.from({ length: 6 }, (_, i) => ({ id: `private-${i + 1}`, name: `Private ${i + 1}`, console: 'ps4', netflix: false, price1hr: 10000, price3hr: 25000 })),
+  regular: Array.from({ length: 6 }, (_, i) => ({ id: `regular-${i + 1}`, name: `Regular ${i + 1}`, console: 'ps4', netflix: false, price1hr: 7000, price3hr: 20000 })),
 };
-
-const initialUnits: RentalUnit[] = [...unitSetup.vip, ...unitSetup.private, ...unitSetup.regular];
+const staticUnitDetails = [...unitSetup.vip, ...unitSetup.private, ...unitSetup.regular];
 
 function AdminPage() {
   const [orders, setOrders] = useState<IOrder[]>([]);
   const [showNotification, setShowNotification] = useState(false);
-  const [units, setUnits] = useState<RentalUnit[]>(initialUnits);
+  const [units, setUnits] = useState<RentalUnit[]>([]);
+  const [isSessionDialogOpen, setSessionDialogOpen] = useState(false);
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const hasInteracted = useRef(false);
+  const timerRefs = useRef<Record<string, NodeJS.Timeout>>({});
+
+  const manageTimer = (unit: RentalUnit) => {
+    if (timerRefs.current[unit.id]) clearInterval(timerRefs.current[unit.id]);
+    if (unit.status === 'Digunakan' && unit.remainingTime > 0) {
+      timerRefs.current[unit.id] = setInterval(() => {
+        setUnits(prev => prev.map(u => 
+          u.id === unit.id ? { ...u, remainingTime: Math.max(0, u.remainingTime - 1) } : u
+        ));
+      }, 1000);
+    } 
+  };
 
   useEffect(() => {
     audioRef.current = new Audio('/music/notification.mp3');
-    const enableAudio = () => { hasInteracted.current = true; window.removeEventListener('click', enableAudio); window.removeEventListener('keydown', enableAudio); };
-    window.addEventListener('click', enableAudio);
-    window.addEventListener('keydown', enableAudio);
-    return () => { window.removeEventListener('click', enableAudio); window.removeEventListener('keydown', enableAudio); };
-  }, []);
-
-  useEffect(() => {
-    const fetchActiveOrders = async () => {
+    const fetchInitialUnitStatus = async () => {
       try {
-        const response = await fetch('/api/orders');
-        if (!response.ok) throw new Error('Gagal mengambil data pesanan awal');
-        const data: IOrder[] = await response.json();
-        setOrders(data);
-      } catch (error) { console.error(error); }
+        const res = await fetch('/api/units');
+        const serverUnits: RentalUnit[] = await res.json();
+        const combinedUnits = staticUnitDetails.map(staticUnit => ({ ...staticUnit, ...serverUnits.find(su => su.id === staticUnit.id) }));
+        setUnits(combinedUnits);
+        combinedUnits.forEach(manageTimer);
+      } catch (error) { console.error("Gagal mengambil status unit:", error); }
     };
-    fetchActiveOrders();
+    const fetchInitialOrders = async () => {
+      try {
+        const res = await fetch('/api/orders');
+        if (!res.ok) throw new Error('Gagal memuat pesanan');
+        setOrders(await res.json());
+      } catch (error) { console.error("Gagal mengambil pesanan awal:", error); }
+    };
+    fetchInitialUnitStatus();
+    fetchInitialOrders();
+    return () => Object.values(timerRefs.current).forEach(clearInterval);
   }, []);
 
-  // --- DIUBAH: Menggabungkan semua listener Pusher dalam satu useEffect --- 
   useEffect(() => {
-    // --- Listener untuk Notifikasi Pesanan ---
-    const playNotificationSound = () => {
-      if (hasInteracted.current) { audioRef.current?.play().catch(console.error); }
-      setShowNotification(true);
-      setTimeout(() => setShowNotification(false), 3500);
-    };
-    const handleNewOrder = (newOrder: IOrder) => { if (!newOrder?._id) return; setOrders(prev => [newOrder, ...prev.filter(o => o._id !== newOrder._id)]); playNotificationSound(); };
-    const handleOrderStatusUpdate = (updatedOrder: IOrder) => { if (!updatedOrder?._id) return; const isFinished = updatedOrder.status === 'completed' || updatedOrder.status === 'cancelled'; if (isFinished) { setOrders(prev => prev.filter(order => order._id !== updatedOrder._id)); } else { setOrders(prev => prev.map(order => order._id === updatedOrder._id ? updatedOrder : order)); } };
-    
     const orderChannel = pusherClient.subscribe('orders');
-    orderChannel.bind('new-order', handleNewOrder);
-    orderChannel.bind('status-update', handleOrderStatusUpdate);
-
-    // --- Listener untuk Status Unit Real-time ---
     const unitChannel = pusherClient.subscribe('unit-status');
-    const handleUnitStatusUpdate = ({ id, newStatus }: { id: string; newStatus: 'Tersedia' | 'Digunakan' }) => {
-        setUnits(prev => prev.map(u => String(u.id) === id ? { ...u, status: newStatus } : u));
+    const playSound = () => { audioRef.current?.play().catch(console.error); setShowNotification(true); setTimeout(() => setShowNotification(false), 3500); };
+
+    const handleNewOrder = (newOrder: IOrder) => {
+      setOrders(prev => [newOrder, ...prev]);
+      playSound();
     };
-    unitChannel.bind('status-update', handleUnitStatusUpdate);
+
+    // --- PERBAIKAN: Logika Pusher disempurnakan ---
+    const handleStatusUpdate = (updatedOrder: IOrder) => {
+      if (updatedOrder.status === 'completed' || updatedOrder.status === 'cancelled') {
+        // Jika selesai atau dibatalkan, HAPUS dari daftar aktif
+        setOrders(prev => prev.filter(o => o._id !== updatedOrder._id));
+      } else {
+        // Jika status lain (pending -> cooking), PERBARUI di daftar
+        setOrders(prev => prev.map(o => o._id === updatedOrder._id ? updatedOrder : o));
+      }
+    };
+
+    const handleUnitUpdate = (updatedUnit: RentalUnit) => {
+      setUnits(prev => prev.map(u => u.id === updatedUnit.id ? { ...u, ...updatedUnit } : u));
+      manageTimer(updatedUnit);
+    };
+
+    orderChannel.bind('new-order', handleNewOrder);
+    orderChannel.bind('status-update', handleStatusUpdate);
+    unitChannel.bind('status-update', handleUnitUpdate);
 
     return () => {
-      orderChannel.unbind_all();
       pusherClient.unsubscribe('orders');
-      unitChannel.unbind_all();
       pusherClient.unsubscribe('unit-status');
     };
   }, []);
 
+  // --- FUNGSI BARU: Menangani perubahan status & mengirim ke API ---
   const handleStatusChange = async (orderId: string, newStatus: IOrder['status']) => {
-    try { await fetch(`/api/orders/${orderId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }), }); } catch (error) { console.error('Gagal memperbarui status pesanan:', error); }
-  };
-
-  // --- DIUBAH: Fungsi ini sekarang memanggil API untuk menyiarkan perubahan ---
-  const toggleUnitStatus = async (unitId: string, currentStatus: 'Tersedia' | 'Digunakan') => {
-    const newStatus = currentStatus === 'Tersedia' ? 'Digunakan' : 'Tersedia';
     try {
-      await fetch(`/api/units/${unitId}/status`, {
-        method: 'PUT',
+      await fetch(`/api/orders/${orderId}`,
+       {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
+      // Tidak perlu update state di sini, Pusher akan menanganinya secara real-time
     } catch (error) {
-      console.error('Gagal memperbarui status unit:', error);
+      console.error("Gagal memperbarui status pesanan:", error);
+      // Di sini bisa ditambahkan notifikasi error untuk pengguna jika perlu
     }
   };
 
+  const broadcastStatusChange = async (unitId: string, newStatus: 'Tersedia' | 'Digunakan', remainingTime: number = 0) => {
+    try {
+      await fetch('/api/units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: unitId, status: newStatus, remainingTime }),
+      });
+    } catch (error) { console.error('Gagal menyiarkan status unit:', error); }
+  };
+
+  const handleStartSession = (durationInMinutes: number) => {
+    if (!selectedUnitId) return;
+    broadcastStatusChange(selectedUnitId, 'Digunakan', durationInMinutes * 60);
+    setSessionDialogOpen(false);
+  };
+
+  const handleEndSession = (unitId: string) => {
+    broadcastStatusChange(unitId, 'Tersedia', 0);
+  };
+
+  const openSessionDialog = (unitId: string) => {
+    setSelectedUnitId(unitId);
+    setSessionDialogOpen(true);
+  };
+
+  const formatTime = (seconds: number) => {
+    if (seconds <= 0) return '00:00:00';
+    const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+    const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
+
   const renderUnitGroup = (title: string, unitsToRender: RentalUnit[]) => (
-      <div key={title}>
-          <h3 className="text-xl font-bold tracking-tight mb-3 text-primary">{title}</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {unitsToRender.map(unit => (
-                  <Card key={unit.id} className={cn("text-center transition-all", unit.status === 'Tersedia' ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30')}>
-                      <CardHeader className="p-3 pb-1">
-                          <CardTitle className="text-base">{unit.name}</CardTitle>
-                          <CardDescription className="text-xs">{unit.console}</CardDescription>
-                      </CardHeader>
-                      <CardContent className="p-3 pt-1">
-                          <p className={cn("font-bold mb-2 text-sm", unit.status === 'Tersedia' ? 'text-green-400' : 'text-red-400')}>{unit.status}</p>
-                          {/* --- DIUBAH: Mengirim status saat ini ke fungsi toggle --- */}
-                          <Button onClick={() => toggleUnitStatus(unit.id, unit.status)} size="sm" variant='secondary' className='w-full h-8 text-xs'>
-                              {unit.status === 'Tersedia' ? 'Mulai Sesi' : 'Akhiri Sesi'}
-                          </Button>
-                      </CardContent>
-                  </Card>
-              ))}
-          </div>
+    <div key={title}>
+      <h3 className="text-xl font-bold tracking-tight mb-4 text-primary">{title}</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {unitsToRender.map(unit => {
+          const isRunning = unit.status === 'Digunakan';
+          return (
+            <Card key={unit.id} className={cn("flex flex-col transition-all shadow-md", isRunning ? 'bg-red-900/40 border-red-500/50' : 'bg-secondary/50 border-primary/20')}>
+              <CardHeader className='p-4 pb-3'>
+                <div className="flex justify-between items-center gap-4">
+                  <CardTitle className='text-lg font-bold'>{unit.name}</CardTitle>
+                  {isRunning && unit.remainingTime > 0 ? (
+                    <div className="font-mono text-xl font-bold text-red-400 tracking-tight whitespace-nowrap">{formatTime(unit.remainingTime)}</div>
+                  ) : (
+                    <div className="text-lg font-bold text-green-400 whitespace-nowrap">Tersedia</div>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className='p-4 pt-0'>
+                <div className="flex justify-between items-end text-muted-foreground text-sm mb-4">
+                  <div className='flex flex-col gap-1.5'>
+                    <p>1 Jam: Rp {unit.price1hr.toLocaleString('id-ID')}</p>
+                    <p>3 Jam: Rp {unit.price3hr.toLocaleString('id-ID')}</p>
+                  </div>
+                  <div className='flex flex-col items-end gap-1.5'>
+                    <div className={cn(`flex items-center gap-1.5 font-semibold`, unit.console === 'ps5' ? 'text-blue-400' : 'text-gray-300')}>
+                      <Gamepad2 size={16} />
+                      <span>{unit.console.toUpperCase()}</span>
+                    </div>
+                    {unit.netflix && (
+                      <div className="flex items-center gap-1.5 font-semibold text-red-500"><Film size={16} /><span>Netflix</span></div>
+                    )}
+                  </div>
+                </div>
+                <Button onClick={() => isRunning ? handleEndSession(unit.id) : openSessionDialog(unit.id)} size="sm" className='w-full h-9 text-sm font-bold' variant={isRunning ? 'destructive' : 'default'}>
+                  {isRunning ? 'Akhiri Sesi' : 'Mulai Sesi'}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
+    </div>
   );
 
   return (
     <div className="container mx-auto px-4 py-12 md:px-6 lg:py-16 space-y-12">
-        <div className="flex justify-between items-center gap-4">
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl font-headline text-left">Admin Only</h1>
-            <div className='flex items-center gap-2'>
-              {showNotification && <BellRing className="h-7 w-7 text-primary animate-shake" />}
-              <Link href="/admin/dashboard" passHref><Button variant="outline" size="sm" className="flex items-center gap-2"><BookOpenCheck size={14} /><span className='hidden sm:inline'>Data Booking</span></Button></Link>
-              <Link href="/history" passHref><Button variant="outline" size="sm" className="flex items-center gap-2"><History size={14} /><span className='hidden sm:inline'>Riwayat Pesanan</span></Button></Link>
-            </div>
+      <div className="flex justify-between items-center gap-4">
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl font-headline text-left">Admin Only</h1>
+        <div className='flex items-center gap-2'>
+          {showNotification && <BellRing className="h-7 w-7 text-primary animate-shake" />}
+          <Link href="/admin/dashboard" passHref><Button variant="outline" size="sm" className="flex items-center gap-2"><BookOpenCheck size={14} /><span className='hidden sm:inline'>Data Booking</span></Button></Link>
+          <Link href="/history" passHref><Button variant="outline" size="sm" className="flex items-center gap-2"><History size={14} /><span className='hidden sm:inline'>Riwayat Pesanan</span></Button></Link>
         </div>
-
-        <div>
-          <h2 className="text-2xl font-semibold mb-6 flex items-center gap-3"><MonitorPlay size={24}/> Manajemen Status Unit</h2>
-          <div className="space-y-6">
-              {renderUnitGroup('VIP', units.filter(u => String(u.id).startsWith('vip')))}
-              {renderUnitGroup('Private', units.filter(u => String(u.id).startsWith('private')))}
-              {renderUnitGroup('Regular', units.filter(u => String(u.id).startsWith('regular')))}
-          </div>
-        </div>
-
-        <div>
-          <h2 className="text-2xl font-semibold mb-4 flex items-center gap-3"><Gamepad2 size={24}/> Pesanan Aktif</h2>
-          {orders.length === 0 ? (
-              <Card className='text-center border-dashed'><CardContent className='p-12'><ShoppingBag className="mx-auto h-12 w-12 text-muted-foreground" /><p className='mt-4 text-muted-foreground'>Belum ada pesanan aktif.</p></CardContent></Card>
+      </div>
+      <RealTimeClock />
+      <div>
+        <h2 className="text-2xl font-semibold mb-6 flex items-center gap-3"><MonitorPlay size={24}/> Manajemen Status Unit</h2>
+        <div className="space-y-8">
+          {units.length > 0 ? (
+            <>
+              {renderUnitGroup('VIP', units.filter(u => u.id.startsWith('vip')))}
+              {renderUnitGroup('Private', units.filter(u => u.id.startsWith('private')))}
+              {renderUnitGroup('Regular', units.filter(u => u.id.startsWith('regular')))}
+            </>
           ) : (
-              <div className="space-y-4">{orders.map((order) => (<OrderCard key={order._id} order={order} onStatusChange={handleStatusChange} />))}</div>
+            <p className='text-center text-muted-foreground'>Memuat status unit...</p>
           )}
         </div>
+      </div>
+      <div>
+        <h2 className="text-2xl font-semibold mb-4 flex items-center gap-3"><ShoppingBag size={24}/> Pesanan Aktif</h2>
+        {orders.length === 0 ? (
+          <Card className='text-center border-dashed'><CardContent className='p-12'><ShoppingBag className="mx-auto h-12 w-12 text-muted-foreground" /><p className='mt-4 text-muted-foreground'>Belum ada pesanan aktif.</p></CardContent></Card>
+        ) : (
+          <div className="space-y-4">{orders.map((order) => (<OrderCard key={order._id} order={order} onStatusChange={handleStatusChange} />))}</div>
+        )}
+      </div>
+      <SessionDialog open={isSessionDialogOpen} onOpenChange={setSessionDialogOpen} onStartSession={handleStartSession} />
     </div>
   );
 }

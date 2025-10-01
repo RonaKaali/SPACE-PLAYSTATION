@@ -1,34 +1,25 @@
+import mongoose, { Connection } from 'mongoose';
 
-import mongoose from 'mongoose';
-
-// Deklarasi variabel global untuk caching koneksi Mongoose
-declare global {
-  var mongoose: any; 
-}
-
-// Ambil URI MongoDB dari environment variables
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
   throw new Error(
-    'Harap definisikan variabel MONGODB_URI di dalam file .env.local'
+    'Tolong definisikan variabel lingkungan MONGODB_URI di dalam .env.local'
   );
 }
 
 /**
- * Global is used here to maintain a cached connection across hot reloads
- * in development. This prevents connections from growing exponentially
- * during API Route usage.
+ * Cache koneksi global.
+ * Ini mencegah pembuatan koneksi baru setiap kali ada Hot-Reload di mode development.
  */
-let cached = global.mongoose;
+let cached = (global as any).mongoose;
 
 if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
+  cached = (global as any).mongoose = { conn: null, promise: null };
 }
 
-async function dbConnect() {
+async function dbConnect(): Promise<Connection> {
   if (cached.conn) {
-    console.log('♻️  Using cached MongoDB connection');
     return cached.conn;
   }
 
@@ -37,26 +28,18 @@ async function dbConnect() {
       bufferCommands: false,
     };
 
-    console.log('⏳  Attempting new MongoDB connection...');
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      console.log('✅  New MongoDB connection successful!');
-      return mongoose;
-    }).catch(error => {
-      console.error('❌  MongoDB connection error:', error);
-      // Hapus promise yang gagal agar bisa mencoba lagi nanti
-      cached.promise = null;
-      throw error; // Lemparkan kembali error setelah dicatat
+    cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
+      return mongoose.connection;
     });
   }
-  
+
   try {
     cached.conn = await cached.promise;
-  } catch (error) {
-    // Jika promise gagal, error akan ditangkap di sini
-    cached.conn = null; // Pastikan koneksi yang gagal tidak di-cache
-    throw error; // Lemparkan kembali error agar pemanggil tahu ada masalah
+  } catch (e) {
+    cached.promise = null;
+    throw e;
   }
-  
+
   return cached.conn;
 }
 

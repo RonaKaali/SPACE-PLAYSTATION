@@ -4,44 +4,60 @@ import dbConnect from '@/lib/mongodb';
 import Order from '@/lib/models/order';
 import { pusherServer } from '@/lib/pusher';
 
-// --- GET: Mengambil semua data pesanan AKTIF ---
+// GET /api/orders
 export async function GET() {
   try {
     await dbConnect();
-    // DIUBAH: Hanya mengambil pesanan yang statusnya BUKAN 'completed' atau 'cancelled'
-    const orders = await Order.find({ 
+    const activeOrders = await Order.find({ 
       status: { $nin: ['completed', 'cancelled'] } 
     }).sort({ createdAt: -1 });
-    
-    return NextResponse.json(orders);
+    return NextResponse.json(activeOrders);
   } catch (error) {
-    console.error('❌ Error fetching active orders:', error);
-    return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+    console.error('Gagal mengambil pesanan aktif:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan internal server';
+    return NextResponse.json({ message: 'Gagal mengambil pesanan.', error: errorMessage }, { status: 500 });
   }
 }
 
-// --- POST: Membuat pesanan baru ---
-export async function POST(request: Request) {
+// POST /api/orders
+export async function POST(req: Request) {
   try {
     await dbConnect();
-    const body = await request.json();
-    console.log('📦  Received new order request:', JSON.stringify(body, null, 2));
+    const body = await req.json();
+    // Ambil `total` dan `items` dari body
+    const { items, total, unit } = body;
 
-    // Buat dan simpan pesanan baru
-    const newOrder = new Order(body);
-    await newOrder.save();
-    console.log('💾  Order saved successfully to database with ID:', newOrder._id);
+    if (!items || !Array.isArray(items) || items.length === 0 || !total || !unit) {
+      return NextResponse.json({ message: 'Data pesanan tidak lengkap atau tidak valid.' }, { status: 400 });
+    }
 
-    // =======================================================
-    // !! KRUSIAL: Memicu Pusher untuk notifikasi real-time !!
-    // =======================================================
-    console.log('📡  Triggering Pusher event for new-order...');
+    // ---- PERBAIKAN: Transformasi data agar sesuai dengan Skema Mongoose ----
+    const transformedItems = items.map(item => ({
+      menuItem: item.id, // Gunakan item.id sebagai referensi ke menuItem
+      quantity: item.quantity,
+      price: item.price,
+    }));
+
+    const newOrderPayload = {
+      unit,
+      items: transformedItems, 
+      totalAmount: total, // Map `total` ke `totalAmount`
+      status: 'pending',
+    };
+    // ----------------------------------------------------------------------
+
+    const newOrder = await Order.create(newOrderPayload);
+
     await pusherServer.trigger('orders', 'new-order', newOrder);
-    console.log('✅  Pusher event triggered successfully.');
 
-    return NextResponse.json(newOrder, { status: 201 });
+    return NextResponse.json(
+      { message: "Pesanan berhasil dibuat!", order: newOrder },
+      { status: 201 }
+    );
+
   } catch (error) {
-    console.error('❌ Error creating order:', error);
-    return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+    console.error('Gagal membuat pesanan:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan internal server';
+    return NextResponse.json({ message: 'Gagal membuat pesanan.', error: errorMessage }, { status: 500 });
   }
 }

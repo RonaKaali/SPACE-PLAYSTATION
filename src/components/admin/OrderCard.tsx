@@ -1,25 +1,21 @@
-
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, Tag } from "lucide-react"; // Impor ikon Tag
+import { Clock, Tag } from "lucide-react";
 import { IOrder } from "@/lib/models/order";
 import { cn } from "@/lib/utils";
 
-// Tipe untuk props komponen OrderCard
 type OrderCardProps = {
   order: IOrder;
   onStatusChange: (orderId: string, status: IOrder['status']) => void;
 };
 
-// Fungsi untuk memformat waktu agar lebih mudah dibaca
 const formatTime = (dateString: string | Date) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 }
 
-// Map status ke warna dan teks untuk UI
 const statusStyles: Record<IOrder['status'], { borderColor: string; label: string }> = {
   pending:   { borderColor: 'border-l-yellow-400', label: 'Menunggu' },
   cooking:   { borderColor: 'border-l-blue-400',   label: 'Dimasak' },
@@ -28,7 +24,8 @@ const statusStyles: Record<IOrder['status'], { borderColor: string; label: strin
 };
 
 export function OrderCard({ order, onStatusChange }: OrderCardProps) {
-  if (!order || !order.items) {
+  // Guard clause untuk mencegah crash jika data tidak lengkap
+  if (!order || !order.items || !order.total) {
     return null; 
   }
 
@@ -39,7 +36,6 @@ export function OrderCard({ order, onStatusChange }: OrderCardProps) {
     <Card className={cn("bg-card border border-l-4 shadow-md animate-fade-in-down", statusStyles[currentStatus]?.borderColor)}>
         <CardHeader className="p-4">
             <CardTitle className="flex justify-between items-center text-lg">
-                {/* DIPERBAIKI: Menggunakan order.unit, bukan order.tableNumber */}
                 <span className="font-bold text-primary flex items-center gap-2"><Tag size={16}/> {order.unit}</span>
                 <span className="text-sm font-normal text-muted-foreground flex items-center gap-1.5">
                     <Clock size={14}/>
@@ -49,24 +45,21 @@ export function OrderCard({ order, onStatusChange }: OrderCardProps) {
         </CardHeader>
         <CardContent className="p-4">
             <div className="space-y-2 text-sm">
-                {order.items.map((item, index) => {
-                    // DIPERBAIKI: Langsung menampilkan menuItem (string) karena tidak lagi di-populate
-                    return (
-                        <div key={index} className="flex justify-between items-center">
-                            <span className="capitalize">{item.menuItem.replace(/-/g, ' ')}</span>
-                            <span className="font-semibold">x{item.quantity}</span>
-                        </div>
-                    )
-                })}
+                {order.items.map((item, index) => (
+                    <div key={index} className="flex justify-between items-center">
+                        {/* PERBAIKAN: Menggunakan item.name, bukan item.menuItem */}
+                        <span className="capitalize">{item.name}</span>
+                        <span className="font-semibold">x{item.quantity}</span>
+                    </div>
+                ))}
             </div>
         </CardContent>
         <CardFooter className="p-4 bg-secondary/30 flex justify-between items-center">
             <div className="font-bold text-lg">
-                {/* DIPERBAIKI: Menggunakan order.totalAmount, bukan order.totalPrice */}
-                Total: Rp {order.totalAmount.toLocaleString('id-ID')}
+                {/* PERBAIKAN: Menggunakan order.total, bukan order.totalAmount */}
+                Total: Rp {order.total.toLocaleString('id-ID')}
             </div>
 
-            {/* Aksi untuk mengubah status */}
             <Select
               value={currentStatus}
               onValueChange={(newStatus: IOrder['status']) => onStatusChange(order._id, newStatus)}
