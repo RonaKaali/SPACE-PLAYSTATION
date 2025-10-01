@@ -1,8 +1,8 @@
 
-import { GetServerSideProps } from 'next';
 import dbConnect from '@/lib/mongodb';
-import Order, { IOrder } from '@/lib/models/order';
+import Order from '@/lib/models/order';
 import HistoryClientPage from './HistoryClientPage'; // Komponen sisi klien
+import { unstable_noStore as noStore } from 'next/cache';
 
 export type CompletedOrder = {
   _id: string;
@@ -18,25 +18,15 @@ export type CompletedOrder = {
   }[];
 };
 
-type HistoryPageProps = {
-  initialOrders: CompletedOrder[];
-};
-
-export default function HistoryPage({ initialOrders }: HistoryPageProps) {
-  return <HistoryClientPage initialOrders={initialOrders} />;
-}
-
-// --- Pengambilan Data di Sisi Server (SSR) ---
-export const getServerSideProps: GetServerSideProps = async (context) => {
+async function getCompletedOrders(): Promise<CompletedOrder[]> {
+  noStore();
   try {
     await dbConnect();
 
-    // Hanya ambil pesanan yang sudah selesai dan urutkan dari yang terbaru
     const completedOrders = await Order.find({ status: 'completed' })
                                        .sort({ updatedAt: -1 })
-                                       .lean(); // .lean() untuk objek JS murni & performa
+                                       .lean();
 
-    // Konversi data agar aman untuk dikirim ke komponen client
     const sanitizedOrders: CompletedOrder[] = completedOrders.map(order => ({
       _id: order._id.toString(),
       unit: order.unit,
@@ -45,23 +35,20 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
       items: order.items.map(item => ({
-        name: item.name || 'N/A', // Pastikan ada nama
+        name: item.name || 'N/A',
         quantity: item.quantity,
         price: item.price,
       })),
     }));
 
-    return {
-      props: {
-        initialOrders: sanitizedOrders,
-      },
-    };
+    return sanitizedOrders;
   } catch (error) {
-    console.error("SSR Error - Gagal mengambil riwayat pesanan:", error);
-    return {
-      props: {
-        initialOrders: [], // Kirim array kosong jika terjadi error
-      },
-    };
+    console.error("Data Fetching Error - Gagal mengambil riwayat pesanan:", error);
+    return [];
   }
-};
+}
+
+export default async function HistoryPage() {
+  const initialOrders = await getCompletedOrders();
+  return <HistoryClientPage initialOrders={initialOrders} />;
+}
