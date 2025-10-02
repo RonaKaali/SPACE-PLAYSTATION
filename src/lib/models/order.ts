@@ -1,9 +1,10 @@
 
 import mongoose, { Document, Schema, model, models } from 'mongoose';
+import { IMenuItem } from './menuItem';
 
 // Definisikan tipe untuk satu item dalam pesanan
 export interface IOrderItem {
-  menuItem: string; // Diubah ke string untuk mencocokkan ID slug (misal: "coca-cola")
+  menuItem: string | IMenuItem; // Bisa berupa string (ID) atau objek IMenuItem (setelah populate)
   quantity: number;
 }
 
@@ -20,7 +21,7 @@ export interface IOrder extends Document {
 // Definisikan Schema Mongoose untuk satu item dalam pesanan
 const OrderItemSchema = new Schema({
   // DIUBAH: Tipe diubah ke String dan ref dihapus agar cocok dengan data frontend
-  menuItem: { type: String, required: true },
+  menuItem: { type: String, required: true, ref: 'MenuItem' }, // Ditambahkan ref
   quantity: { type: Number, required: true, min: 1 },
 }, { _id: false });
 

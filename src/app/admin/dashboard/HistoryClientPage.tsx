@@ -4,28 +4,25 @@ import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DateRange } from "react-day-picker";
-import { DateRangePicker } from "@/components/ui/date-range-picker"; // Asumsi komponen ini ada
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Download, DollarSign, Hash, Calendar as CalendarIcon, ArrowLeft } from 'lucide-react';
 import { addDays, format } from 'date-fns';
-import { CompletedOrder } from './page'; // Impor tipe dari file utama
+import { CompletedOrder } from './page';
 import Link from 'next/link';
 
-// Fungsi untuk mengubah data menjadi format CSV
 const convertToCSV = (data: CompletedOrder[]) => {
   const headers = ['ID Pesanan', 'Tanggal Selesai', 'Unit', 'Total Bayar', 'Item'];
   const rows = data.map(order => [
     order._id,
     format(new Date(order.updatedAt), 'yyyy-MM-dd HH:mm:ss'),
     order.unit,
-    order.totalAmount,
+    order.totalAmount || 0, // Fallback ke 0 jika tidak ada
     order.items.map(item => `${item.name} (x${item.quantity})`).join(', ')
   ].join(','));
   return [headers.join(','), ...rows].join('\r\n');
 };
 
-// Fungsi untuk memicu download file
 const downloadCSV = (csvString: string, filename: string) => {
   const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
@@ -42,24 +39,25 @@ const downloadCSV = (csvString: string, filename: string) => {
 
 export default function HistoryClientPage({ initialOrders }: { initialOrders: CompletedOrder[] }) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: addDays(new Date(), -30), // Default 30 hari terakhir
+    from: addDays(new Date(), -30),
     to: new Date(),
   });
 
-  // Filter pesanan berdasarkan rentang tanggal yang dipilih
   const filteredOrders = useMemo(() => {
     if (!dateRange || !dateRange.from) return initialOrders;
     const fromDate = dateRange.from;
-    const toDate = dateRange.to || dateRange.from; // Jika `to` tidak ada, anggap sama dengan `from`
+    const toDate = dateRange.to || dateRange.from;
 
     return initialOrders.filter(order => {
       const orderDate = new Date(order.updatedAt);
-      return orderDate >= fromDate && orderDate <= addDays(toDate, 1); // Tambah 1 hari agar `to` inklusif
+      return orderDate >= fromDate && orderDate <= addDays(toDate, 1);
     });
   }, [initialOrders, dateRange]);
 
-  // Kalkulasi rangkuman data
-  const totalRevenue = useMemo(() => filteredOrders.reduce((acc, order) => acc + order.totalAmount, 0), [filteredOrders]);
+  const totalRevenue = useMemo(() => 
+    filteredOrders.reduce((acc, order) => acc + (order.totalAmount || 0), 0), 
+    [filteredOrders]
+  );
   const totalOrders = filteredOrders.length;
 
   const handleDownload = () => {
@@ -84,7 +82,6 @@ export default function HistoryClientPage({ initialOrders }: { initialOrders: Co
             </div>
         </div>
 
-        {/* Area Filter & Aksi */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 p-4 rounded-lg bg-card border">
             <div className="flex items-center gap-2">
                 <CalendarIcon className="h-5 w-5 text-muted-foreground"/>
@@ -96,7 +93,6 @@ export default function HistoryClientPage({ initialOrders }: { initialOrders: Co
             </Button>
         </div>
 
-        {/* Kartu Rangkuman */}
         <div className="grid gap-4 md:grid-cols-2">
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -104,7 +100,7 @@ export default function HistoryClientPage({ initialOrders }: { initialOrders: Co
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold">Rp {totalRevenue.toLocaleString('id-ID')}</div>
+                    <div className="text-2xl font-bold">Rp {(totalRevenue || 0).toLocaleString('id-ID')}</div>
                 </CardContent>
             </Card>
             <Card>
@@ -118,7 +114,6 @@ export default function HistoryClientPage({ initialOrders }: { initialOrders: Co
             </Card>
         </div>
 
-        {/* Tabel Data */}
         <Card>
             <CardHeader>
                 <CardTitle>Detail Pesanan</CardTitle>
@@ -140,7 +135,7 @@ export default function HistoryClientPage({ initialOrders }: { initialOrders: Co
                                     <TableRow key={order._id}>
                                         <TableCell>{format(new Date(order.updatedAt), 'dd MMM yyyy, HH:mm')}</TableCell>
                                         <TableCell className="font-medium">{order.unit}</TableCell>
-                                        <TableCell className="text-right">Rp {order.totalAmount.toLocaleString('id-ID')}</TableCell>
+                                        <TableCell className="text-right">Rp {(order.totalAmount || 0).toLocaleString('id-ID')}</TableCell>
                                         <TableCell className='text-sm text-muted-foreground'>
                                             {order.items.map(item => `${item.name} (x${item.quantity})`).join(', ')}
                                         </TableCell>

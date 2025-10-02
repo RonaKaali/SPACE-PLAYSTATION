@@ -10,7 +10,9 @@ export async function GET() {
     await dbConnect();
     const activeOrders = await Order.find({ 
       status: { $nin: ['completed', 'cancelled'] } 
-    }).sort({ createdAt: -1 });
+    })
+    .populate('items.menuItem') // Populate menuItem details
+    .sort({ createdAt: -1 });
     return NextResponse.json(activeOrders);
   } catch (error) {
     console.error('Gagal mengambil pesanan aktif:', error);
