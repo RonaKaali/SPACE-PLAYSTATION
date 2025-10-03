@@ -7,17 +7,15 @@ import { Plus, ShoppingCart, Minus } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from '@/components/ui/use-toast';
 
 interface CartItem extends MenuItem {
   quantity: number;
 }
 
-// Sesuaikan dengan data yang diterima dari /api/units
 interface Unit {
   id: string;
-  // name dan category mungkin tidak ada, jadi buat opsional
   name?: string;
   category?: string;
 }
@@ -173,7 +171,14 @@ export default function MenuPage() {
 
       <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
         <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader><DialogTitle>Pesanan Anda</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Pesanan Anda</DialogTitle>
+            {/* --- PERBAIKAN: Menambahkan DialogDescription untuk Aksesibilitas --- */}
+            <DialogDescription>
+              Periksa kembali item pesanan Anda sebelum mengirim. Pembayaran dilakukan di tempat.
+            </DialogDescription>
+            {/* --- AKHIR PERBAIKAN --- */}
+          </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto p-4 space-y-4">
             {cart.length > 0 ? cart.map(item => (
               <div key={item.id} className="flex justify-between items-center">

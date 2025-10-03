@@ -80,23 +80,25 @@ function AdminPage() {
     return () => Object.values(timerRefs.current).forEach(clearInterval);
   }, []);
 
+  // --- EFEK PUSHER DENGAN FUNGSI PEMBERSIHAN ---
   useEffect(() => {
     const orderChannel = pusherClient.subscribe('orders');
     const unitChannel = pusherClient.subscribe('unit-status');
-    const playSound = () => { audioRef.current?.play().catch(console.error); setShowNotification(true); setTimeout(() => setShowNotification(false), 3500); };
+    const playSound = () => { 
+        audioRef.current?.play().catch(e => console.log(e)); // Lebih baik log errornya
+        setShowNotification(true); 
+        setTimeout(() => setShowNotification(false), 3500); 
+    };
 
     const handleNewOrder = (newOrder: IOrder) => {
       setOrders(prev => [newOrder, ...prev]);
       playSound();
     };
 
-    // --- PERBAIKAN: Logika Pusher disempurnakan ---
     const handleStatusUpdate = (updatedOrder: IOrder) => {
       if (updatedOrder.status === 'completed' || updatedOrder.status === 'cancelled') {
-        // Jika selesai atau dibatalkan, HAPUS dari daftar aktif
         setOrders(prev => prev.filter(o => o._id !== updatedOrder._id));
       } else {
-        // Jika status lain (pending -> cooking), PERBARUI di daftar
         setOrders(prev => prev.map(o => o._id === updatedOrder._id ? updatedOrder : o));
       }
     };
@@ -110,13 +112,15 @@ function AdminPage() {
     orderChannel.bind('status-update', handleStatusUpdate);
     unitChannel.bind('status-update', handleUnitUpdate);
 
+    // --- PERBAIKAN KRUSIAL: Membersihkan listener untuk mencegah duplikasi ---
     return () => {
+      orderChannel.unbind_all();
+      unitChannel.unbind_all();
       pusherClient.unsubscribe('orders');
       pusherClient.unsubscribe('unit-status');
     };
   }, []);
 
-  // --- FUNGSI BARU: Menangani perubahan status & mengirim ke API ---
   const handleStatusChange = async (orderId: string, newStatus: IOrder['status']) => {
     try {
       await fetch(`/api/orders/${orderId}`,
@@ -125,10 +129,8 @@ function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      // Tidak perlu update state di sini, Pusher akan menanganinya secara real-time
     } catch (error) {
       console.error("Gagal memperbarui status pesanan:", error);
-      // Di sini bisa ditambahkan notifikasi error untuk pengguna jika perlu
     }
   };
 

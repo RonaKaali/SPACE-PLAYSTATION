@@ -4,15 +4,16 @@ import { IMenuItem } from './menuItem';
 
 // Definisikan tipe untuk satu item dalam pesanan
 export interface IOrderItem {
-  menuItem: string | IMenuItem; // Bisa berupa string (ID) atau objek IMenuItem (setelah populate)
+  menuItem: mongoose.Types.ObjectId | IMenuItem; // Diubah ke ObjectId
   quantity: number;
+  price: number; // Tambahkan harga saat itu
 }
 
 // Definisikan tipe untuk keseluruhan pesanan
 export interface IOrder extends Document {
-  unit: string;        // DIUBAH: dari tableNumber (Number) menjadi unit (String)
+  unit: string;
   items: IOrderItem[];
-  totalAmount: number; // DIUBAH: dari totalPrice menjadi totalAmount
+  totalAmount: number;
   status: 'pending' | 'cooking' | 'completed' | 'cancelled';
   createdAt: Date;
   updatedAt: Date;
@@ -20,17 +21,15 @@ export interface IOrder extends Document {
 
 // Definisikan Schema Mongoose untuk satu item dalam pesanan
 const OrderItemSchema = new Schema({
-  // DIUBAH: Tipe diubah ke String dan ref dihapus agar cocok dengan data frontend
-  menuItem: { type: String, required: true, ref: 'MenuItem' }, // Ditambahkan ref
+  menuItem: { type: Schema.Types.ObjectId, required: true, ref: 'MenuItem' }, // Diubah ke ObjectId dan ref
   quantity: { type: Number, required: true, min: 1 },
+  price: { type: Number, required: true }, // Tambahkan skema harga
 }, { _id: false });
 
 // Definisikan Schema Mongoose untuk keseluruhan pesanan
 const OrderSchema = new Schema<IOrder>({
-  // DIUBAH: field diubah menjadi 'unit' agar cocok dengan data frontend
   unit: { type: String, required: true },
   items: [OrderItemSchema],
-  // DIUBAH: field diubah menjadi 'totalAmount' agar cocok dengan data frontend
   totalAmount: { type: Number, required: true },
   status: {
     type: String,
@@ -38,7 +37,7 @@ const OrderSchema = new Schema<IOrder>({
     default: 'pending',
   },
 }, {
-  timestamps: true, // Ini akan secara otomatis menambahkan `createdAt` dan `updatedAt`
+  timestamps: true,
 });
 
 const Order = models.Order || model<IOrder>('Order', OrderSchema);

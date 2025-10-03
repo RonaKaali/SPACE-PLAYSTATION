@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,20 @@ import { DateRange } from "react-day-picker";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Download, DollarSign, Hash, Calendar as CalendarIcon, ArrowLeft } from 'lucide-react';
 import { addDays, format } from 'date-fns';
-import { CompletedOrder } from './page';
+import { CompletedOrder, BookingData } from './page';
 import Link from 'next/link';
+import BookingHistoryTable from './BookingHistoryTable';
+import { useToast } from '@/components/ui/use-toast';
+
+// Fungsi untuk mengambil data booking terbaru dari server
+const fetchBookings = async (): Promise<BookingData[]> => {
+    const response = await fetch('/api/bookings'); // Asumsi endpoint ini ada
+    if (!response.ok) {
+        throw new Error('Gagal memuat data booking');
+    }
+    return response.json();
+};
+
 
 const convertToCSV = (data: CompletedOrder[]) => {
   const headers = ['ID Pesanan', 'Tanggal Selesai', 'Unit', 'Total Bayar', 'Item'];
@@ -17,7 +29,7 @@ const convertToCSV = (data: CompletedOrder[]) => {
     order._id,
     format(new Date(order.updatedAt), 'yyyy-MM-dd HH:mm:ss'),
     order.unit,
-    order.totalAmount || 0, // Fallback ke 0 jika tidak ada
+    order.totalAmount || 0, 
     order.items.map(item => `${item.name} (x${item.quantity})`).join(', ')
   ].join(','));
   return [headers.join(','), ...rows].join('\r\n');
@@ -37,27 +49,39 @@ const downloadCSV = (csvString: string, filename: string) => {
   }
 };
 
-export default function HistoryClientPage({ initialOrders }: { initialOrders: CompletedOrder[] }) {
+export default function HistoryClientPage({ initialOrders, initialBookings }: { initialOrders: CompletedOrder[], initialBookings: BookingData[] }) {
+  const { toast } = useToast();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(new Date(), -30),
     to: new Date(),
   });
+  const [bookings, setBookings] = useState<BookingData[]>(initialBookings);
+
+  useEffect(() => {
+    setBookings(initialBookings);
+  }, [initialBookings]);
 
   const filteredOrders = useMemo(() => {
     if (!dateRange || !dateRange.from) return initialOrders;
     const fromDate = dateRange.from;
     const toDate = dateRange.to || dateRange.from;
-
     return initialOrders.filter(order => {
       const orderDate = new Date(order.updatedAt);
       return orderDate >= fromDate && orderDate <= addDays(toDate, 1);
     });
   }, [initialOrders, dateRange]);
 
-  const totalRevenue = useMemo(() => 
-    filteredOrders.reduce((acc, order) => acc + (order.totalAmount || 0), 0), 
-    [filteredOrders]
-  );
+  // Memo-isasi untuk filteredBookings tidak lagi diperlukan di sini karena state akan diperbarui
+
+  const totalRevenue = useMemo(() => {
+    const orderRevenue = filteredOrders.reduce((acc, order) => acc + (order.totalAmount || 0), 0);
+    // Kalkulasi pendapatan booking langsung dari state `bookings`
+    const bookingRevenue = bookings
+      .filter(booking => booking.paymentStatus === 'paid')
+      .reduce((acc, booking) => acc + booking.totalPrice, 0);
+    return orderRevenue + bookingRevenue;
+  }, [filteredOrders, bookings]); // Tambahkan `bookings` sebagai dependency
+
   const totalOrders = filteredOrders.length;
 
   const handleDownload = () => {
@@ -66,6 +90,51 @@ export default function HistoryClientPage({ initialOrders }: { initialOrders: Co
     const filename = `Laporan_Pesanan_${from}_-_${to}.csv`;
     const csvData = convertToCSV(filteredOrders);
     downloadCSV(csvData, filename);
+  };
+
+  // --- FUNGSI DIPERBARUI UNTUK RE-FETCH DATA ---
+  const handleBookingStatusChange = async (bookingId: string) => {
+    const originalBookings = [...bookings]; // Simpan state asli untuk rollback
+    
+    // Optimistic UI Update
+    setBookings(prevBookings =>
+      prevBookings.map(booking =>
+        booking._id === bookingId ? { ...booking, paymentStatus: 'paid' } : booking
+      )
+    );
+
+    try {
+      const response = await fetch(`/api/bookings/${bookingId}/updateStatus`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentStatus: 'paid' }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Gagal memperbarui status di server');
+      }
+      
+      // Jika berhasil, tampilkan notifikasi
+      toast({
+        title: "Status Berhasil Diperbarui",
+        description: "Booking telah ditandai sebagai Lunas.",
+        variant: "success",
+      });
+
+      // Ambil data terbaru dari server untuk memastikan konsistensi
+      const updatedBookings = await fetchBookings();
+      setBookings(updatedBookings);
+
+    } catch (error: any) {
+      // Rollback UI jika API call atau fetch gagal
+      setBookings(originalBookings);
+      toast({
+        title: "Gagal Memperbarui Status",
+        description: error.message || "Terjadi kesalahan. Coba lagi.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -82,77 +151,86 @@ export default function HistoryClientPage({ initialOrders }: { initialOrders: Co
             </div>
         </div>
 
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 p-4 rounded-lg bg-card border">
-            <div className="flex items-center gap-2">
-                <CalendarIcon className="h-5 w-5 text-muted-foreground"/>
-                <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+        <div className="space-y-8">
+            <h2 className="text-2xl font-bold text-white">Laporan Pemesanan</h2>
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 p-4 rounded-lg bg-card border">
+                <div className="flex items-center gap-2">
+                    <CalendarIcon className="h-5 w-5 text-muted-foreground"/>
+                    <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+                </div>
+                <Button onClick={handleDownload} disabled={filteredOrders.length === 0}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Laporan (CSV)
+                </Button>
             </div>
-            <Button onClick={handleDownload} disabled={filteredOrders.length === 0}>
-                <Download className="mr-2 h-4 w-4" />
-                Download Laporan (CSV)
-            </Button>
-        </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Pendapatan</CardTitle>
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">Rp {(totalRevenue || 0).toLocaleString('id-ID')}</div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Pesanan Selesai</CardTitle>
+                        <Hash className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{totalOrders}</div>
+                    </CardContent>
+                </Card>
+            </div>
+
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Pendapatan</CardTitle>
-                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <CardHeader>
+                    <CardTitle>Detail Pesanan</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold">Rp {(totalRevenue || 0).toLocaleString('id-ID')}</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Pesanan Selesai</CardTitle>
-                    <Hash className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                    <div className="text-2xl font-bold">{totalOrders}</div>
-                </CardContent>
-            </Card>
-        </div>
-
-        <Card>
-            <CardHeader>
-                <CardTitle>Detail Pesanan</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="overflow-x-auto">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Tanggal</TableHead>
-                                <TableHead>Unit</TableHead>
-                                <TableHead className="text-right">Total Bayar</TableHead>
-                                <TableHead>Item Dipesan</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredOrders.length > 0 ? (
-                                filteredOrders.map(order => (
-                                    <TableRow key={order._id}>
-                                        <TableCell>{format(new Date(order.updatedAt), 'dd MMM yyyy, HH:mm')}</TableCell>
-                                        <TableCell className="font-medium">{order.unit}</TableCell>
-                                        <TableCell className="text-right">Rp {(order.totalAmount || 0).toLocaleString('id-ID')}</TableCell>
-                                        <TableCell className='text-sm text-muted-foreground'>
-                                            {order.items.map(item => `${item.name} (x${item.quantity})`).join(', ')}
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Tanggal</TableHead>
+                                    <TableHead>Unit</TableHead>
+                                    <TableHead className="text-right">Total Bayar</TableHead>
+                                    <TableHead>Item Dipesan</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredOrders.length > 0 ? (
+                                    filteredOrders.map(order => (
+                                        <TableRow key={order._id}>
+                                            <TableCell>{format(new Date(order.updatedAt), 'dd MMM yyyy, HH:mm')}</TableCell>
+                                            <TableCell className="font-medium">{order.unit}</TableCell>
+                                            <TableCell className="text-right">Rp {(order.totalAmount || 0).toLocaleString('id-ID')}</TableCell>
+                                            <TableCell className='text-sm text-muted-foreground'>
+                                                {order.items.map(item => `${item.name} (x${item.quantity})`).join(', ') || 'N/A'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="h-24 text-center">
+                                            Tidak ada data untuk periode yang dipilih.
                                         </TableCell>
                                     </TableRow>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">
-                                        Tidak ada data untuk periode yang dipilih.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
-            </CardContent>
-        </Card>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+
+        <BookingHistoryTable 
+            bookings={bookings} // State `bookings` yang sekarang selalu update
+            onStatusChange={handleBookingStatusChange} 
+        />
+
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import {
-  Dialog,  DialogContent,  DialogHeader,  DialogTitle,  DialogFooter,} from '@/components/ui/dialog';
+  Dialog,  DialogContent,  DialogHeader,  DialogTitle, DialogDescription, DialogFooter,} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
@@ -13,11 +13,9 @@ interface SessionDialogProps {
   onStartSession: (duration: number) => void; // Duration in minutes
 }
 
-// Membuat array [1, 2, 3, ..., 10] untuk opsi durasi
 const DURATION_OPTIONS = Array.from({ length: 10 }, (_, i) => i + 1);
 
 export function SessionDialog({ open, onOpenChange, onStartSession }: SessionDialogProps) {
-  // Default durasi diatur ke 1 jam (60 menit)
   const [duration, setDuration] = useState(60);
 
   const handleStart = () => {
@@ -30,14 +28,17 @@ export function SessionDialog({ open, onOpenChange, onStartSession }: SessionDia
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Mulai Sesi</DialogTitle>
+          {/* --- PERBAIKAN: Menambahkan DialogDescription untuk Aksesibilitas --- */}
+          <DialogDescription>
+            Pilih durasi sewa untuk unit ini. Waktu akan langsung berjalan setelah sesi dimulai.
+          </DialogDescription>
+          {/* --- AKHIR PERBAIKAN --- */}
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <p className="text-sm text-muted-foreground">Pilih durasi sewa:</p>
+        <div className="grid gap-4 pt-4">
           <RadioGroup
-            defaultValue={duration.toString()} // Default pilihan ke "60"
+            defaultValue={duration.toString()}
             onValueChange={(value) => setDuration(parseInt(value, 10))}
           >
-            {/* Menampilkan pilihan dalam 2 kolom */}
             <div className="grid grid-cols-2 gap-x-6 gap-y-3">
               {DURATION_OPTIONS.map((hour) => {
                 const valueInMinutes = hour * 60;
